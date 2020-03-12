@@ -68,6 +68,7 @@ xrServer::EConnect xrServer::Connect(shared_str& session_name, GameDescriptionDa
         m_file_transfers = new file_transfer::server_site();
         initialize_screenshot_proxies();
         LoadServerInfo();
+        LoadModLoaderParams();
         xr_auth_strings_t tmp_ignore;
         xr_auth_strings_t tmp_check;
         fill_auth_check_params(tmp_ignore, tmp_check);
@@ -107,6 +108,41 @@ IClient* xrServer::new_client(SClientConnectData* cl_data)
     return CL;
 }
 
+void xrServer::LoadModLoaderParams()
+{
+    string_path fn;
+    FS.update_path(fn, "$app_data_root$", "mod_loader_params.ltx");
+    if (FS.exist(fn))
+    {
+        CInifile ini(fn);
+        fz_mod_name = READ_IF_EXISTS(&ini, r_string, "mod_loader", "mod_name", "");
+        fz_mod_params = READ_IF_EXISTS(&ini, r_string_wb, "mod_loader", "mod_params", "");
+    }
+    else
+    {
+        fz_mod_name = "";
+        fz_mod_params = "";
+    }
+}
+
+struct SendModLoadCbData
+{
+    xrServer* srv;
+    IClient* cl;
+};
+
+void __stdcall xrServer::SendModLoadCb(void* msg, u32 len, void* userdata)
+{
+    SendModLoadCbData* cb_data = reinterpret_cast<SendModLoadCbData*>(userdata);
+    cb_data->srv->IPureServer::SendTo_LL(cb_data->cl->ID, msg, len, net_flags(TRUE, TRUE, TRUE, TRUE));
+}
+
+void xrServer::SendModLoadPacket(IClient* cl)
+{
+    SendModLoadCbData cb_data = {this, cl};
+    fz_features.SendModDownloadMessage(fz_mod_name.c_str(), fz_mod_params.c_str(), xrServer::SendModLoadCb, &cb_data);
+}
+
 void xrServer::AttachNewClient(IClient* CL)
 {
     MSYS_CONFIG msgConfig;
@@ -123,6 +159,11 @@ void xrServer::AttachNewClient(IClient* CL)
     {
         SendTo_LL(CL->ID, &msgConfig, sizeof(msgConfig), net_flags(TRUE, TRUE, TRUE, TRUE));
         Server_Client_Check(CL);
+    }
+
+    if (!CL->flags.bLocal && (fz_mod_name.size() > 0))
+    {
+        SendModLoadPacket(CL);
     }
 
     // gen message

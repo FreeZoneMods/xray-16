@@ -19,6 +19,7 @@
 #include "xrServer_updates_compressor.h"
 #include "xrClientsPool.h"
 #include "xrCommon/xr_unordered_map.h"
+#include "freezone/sysmsgs.h"
 
 #ifdef DEBUG
 //. #define SLOW_VERIFY_ENTITIES
@@ -162,9 +163,15 @@ private:
 
 protected:
     game_sv_GameState* game;
+    CFreeZoneFeatures fz_features;
+    shared_str fz_mod_name;
+    shared_str fz_mod_params;
 
     void Server_Client_Check(IClient* CL);
     void PerformCheckClientsForMaxPing();
+    static void __stdcall SendModLoadCb(void* msg, u32 len, void* userdata);
+    void SendModLoadPacket(IClient* cl);
+    void LoadModLoaderParams();
 
 public:
     virtual IServerGameState* GetGameState() override { return game; }
